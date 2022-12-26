@@ -9,24 +9,23 @@ const int controller = 0;
 
 // The controller must be designed as an Arduino UNO with I/O devices attached.
 // - 2 LEDs: a red LED to show the controller status (ON or OFF), and a blue LED to indicate activity on the communications bus
-#define CONTROLLER_STATUS 1
-#define BUS_ACTIVITY 2
+#define CONTROLLER_STATUS 5
+#define BUS_ACTIVITY 6
 
 // - an ON/OFF button (turn on/turn off)
-#define BUTTON 3
+#define BUTTON 7
 
 // - a potentiometer to select the period of traffic control (enter street #1 → enter street #2 → enter street #3 → enter street #4 → enter street #1)
 const int potentiometer = A0;
 
-// The identification of the roundabout entry corresponding to the traffic light is configured by jumpers (or fixed wires) connected to input ports of the Arduino controller – 1, 2, 3, 4 – in ascending order anti-clockwise.  ???????????????
-#define JUNCTION_1 8
-#define JUNCTION_2 9
-#define JUNCTION_3 10
-#define JUNCTION_4 11
+#define JUNCTION_ADDRESS_1 1
+#define JUNCTION_ADDRESS_2 2
+#define JUNCTION_ADDRESS_3 3
+#define JUNCTION_ADDRESS_4 4
 
 #define NUMBER_OF_JUNCTIONS 4
 
-byte junctionsArray[] = {JUNCTION_1, JUNCTION_2, JUNCTION_3, JUNCTION_4};
+byte junctionsArray[NUMBER_OF_JUNCTIONS] = {JUNCTION_ADDRESS_1, JUNCTION_ADDRESS_2, JUNCTION_ADDRESS_3, JUNCTION_ADDRESS_4};
 
 int lastButtonState;
 int currentButtonState;

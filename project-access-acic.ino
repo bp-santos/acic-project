@@ -5,29 +5,33 @@ const int controller = 0;
 #define NUMBER_OF_LIGHTS = 8;
 
 // Each access – k – has two traffic lights (TL kA, TL kB).
+// The identification of the roundabout entry corresponding to the traffic light is configured by jumpers (or fixed wires) connected to input ports of the Arduino controller – 1, 2, 3, 4 – in ascending order anti-clockwise.
+const byte jumper1 = 1;
+const byte jumper2 = 2;
+const byte jumper3 = 3;
+
 // TL kA controls:
 // - accesses of vehicles to enter the roundabout
-#define TL_AG 1
-#define TL_AY 2
-#define TL_AR 3
+#define TL_AG 4
+#define TL_AY 5
+#define TL_AR 6
 
 // - also has lights and a press button for pedestrians to signal their intent to cross the street (PL kA)
 // To simplify the assembly of the circuit only one set of pedestrian lights and button will be implemented on one side of the 
 street.
-#define BUTTON 4
-#define PL_AG 5
-#define PL_AR 6
+#define BUTTON 7
+#define PL_AG 8
+#define PL_AR 9
 
 // TL kB controls the flow of vehicles in the roundabout
 // - prevents the passage of vehicles once the traffic in the nearby street is allowed in the roundabout
 // - only vehicles turning right, to get off the roundabout, are allowed to proceed
 // The coordination between TL kA and TL kB must be self-sufficient, implemented locally and not by the roundabout controller
-#define TL_BG 7
-#define TL_BY 8
-#define TL_BR 9
+#define TL_BG 10
+#define TL_BY 11
+#define TL_BR 12
 
-
-byte lights[] = {TL_AG, TL_AY, TL_AR, PL_AG, PL_AR, TL_BG, TL_BY, TL_BR};
+byte lights[NUMBER_OF_LIGHTS] = {TL_AG, TL_AY, TL_AR, PL_AG, PL_AR, TL_BG, TL_BY, TL_BR};
 
 const long interval = 500;
 
@@ -47,18 +51,51 @@ byte ack[4];
 byte status[5];
 
 void setup(){
-    Serial.begin(9600); // Starts serial for output
+    // Starts serial for output
+    Serial.begin(9600);
+
+    // Initializes the pedestrian button as an input
+    pinMode(BUTTON, INPUT);
+
+    // Initializes the jumpers as inputs
+    pinMode(jumper1, INPUT);
+    pinMode(jumper2, INPUT);
+    pinMode(jumper3, INPUT);
+
+    // join i2c bus with address #entryNumber
     int entryNumber = getEntryNumber();
-    Wire.begin(entryNumber); // join i2c bus with address #entryNumber
-    Wire.onReceive(receiveEvent); // when master sends a message
-    Wire.onRequest(requestEvent); //when master asks for the answer
-    pinMode(BUTTON, INPUT); // Initializes the pedestrian button as an input
+    Wire.begin(entryNumber);
+
+    // when master sends a message
+    Wire.onReceive(receiveEvent);
+
+    //when master asks for the answer
+    Wire.onRequest(requestEvent);
+
+    // Initializes the traffic lights as outputs
     for(int i = 0; i < NUMBER_OF_LIGHTS; i++)
-        pinMode(lights[i], OUTPUT); // Initializes the traffic lights as outputs
+        pinMode(lights[i], OUTPUT);
 }
 
-void getEntryNumber(){
-
+// The identification of the roundabout entry corresponding to the traffic light is configured by jumpers (or fixed wires) connected to input ports of the Arduino controller – 1, 2, 3, 4 – in ascending order anti-clockwise. ?????? ARDUINO CONTROLLER ?????
+int getEntryNumber(){
+    char entry[3];
+    if (digitalRead(jumper1) == HIGH)
+        entry[0] = '1';
+    if (digitalRead(jumper1) == LOW)
+        entry[0] = '0';
+    if (digitalRead(jumper2) == HIGH)
+        entry[1] = '1';
+    if (digitalRead(jumper2) == LOW)
+        entry[1] = '0';
+    if (digitalRead(jumper3) == HIGH)
+        entry[2] = '1';
+    if (digitalRead(jumper3) == LOW)
+        entry[2] = '0';
+    
+    int number = strtol(entry, NULL, 2);
+    
+    return number;
 }
 
 // Triggered when the Access gets interrupted to read the message from the Controller
