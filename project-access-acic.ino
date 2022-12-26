@@ -1,4 +1,5 @@
 #include "Wire.h"
+#include <stdlib.h>
 
 const int controller = 0;
 #define NUMBER_OF_LIGHTS = 8;
@@ -66,7 +67,7 @@ void receiveEvent(int i) {
         char sender = Wire.read();
         char operationNumber = Wire.read();
         char destination = Wire.read();
-        char integrityByte;                     //WHAT TO DO WITH THIS ??????
+        char integrityByte;                     // WHAT TO DO WITH THIS ??????
         char information;
         if (i == 4)
             integrityByte = Wire.read();
@@ -191,13 +192,9 @@ void receiveOFF(){
 
 // The traffic lights will never do Ping(x) to other traffic lights neither to controller.
 void receivePING(){
-    int data[] = {pedestRedFailing, pedestYellowFailing, pedestGreenFailing, redFailing, yellowFailing, greenFailing, timerActivated, 0};
-    information = convertBinaryToInt(data);
+    char data[] = {pedestRedFailing + '0', pedestYellowFailing + '0', pedestGreenFailing + '0', redFailing + '0', yellowFailing + '0', greenFailing + '0', timerActivated + '0', '0'};
+    information = strtol(data, NULL, 2);
     setSTATUS();
-}
-
-int convertBinaryToInt(int data[]){
-
 }
 
 // The ACK (x) should be send as response to RED(x), GREEN(x) and OFF(x) requests.
