@@ -1,16 +1,18 @@
 #include "Wire.h"
 
-// Each access has two traffic lights
 const int controller = 0;
-#define NUMBER_OF_LIGHTS = 5;                                   // A MUDAR QUANDO SE COLOCAR A FUNCIONAR O TL_BX
+#define NUMBER_OF_LIGHTS = 8;
 
+// Each access – k – has two traffic lights (TL kA, TL kB).
 // TL kA controls:
 // - accesses of vehicles to enter the roundabout
 #define TL_AG 1
 #define TL_AY 2
 #define TL_AR 3
 
-// - a pedestrian button to reduce the waiting time for pedestrians to cross the street
+// - also has lights and a press button for pedestrians to signal their intent to cross the street (PL kA)
+// To simplify the assembly of the circuit only one set of pedestrian lights and button will be implemented on one side of the 
+street.
 #define BUTTON 4
 #define PL_AG 5
 #define PL_AR 6
@@ -18,13 +20,13 @@ const int controller = 0;
 // TL kB controls the flow of vehicles in the roundabout
 // - prevents the passage of vehicles once the traffic in the nearby street is allowed in the roundabout
 // - only vehicles turning right, to get off the roundabout, are allowed to proceed
-/**
- * #define TL_BG 7
- * #define TL_BY 8
- * #define TL_BR 9
- * */
+// The coordination between TL kA and TL kB must be self-sufficient, implemented locally and not by the roundabout controller
+#define TL_BG 7
+#define TL_BY 8
+#define TL_BR 9
 
-byte lights[] = {TL_AG, TL_AY, TL_AR, PL_AG, PL_AR/**, TL_BG, TL_BY, TL_BR*/};
+
+byte lights[] = {TL_AG, TL_AY, TL_AR, PL_AG, PL_AR, TL_BG, TL_BY, TL_BR};
 
 const long interval = 500;
 
@@ -91,33 +93,68 @@ void receiveEvent(int i) {
     }
 }
 
-// While one traffic light is performing a red-yellow-green-yellow-red cycle, the other must have its red light always on (and, in part, pedestrian green). 
+// The coordination between TL kA and TL kB must be self-sufficient, implemented locally and not by the roundabout controller
 void receiveRED(){
+    // Stop blinking YELLOW (turned ON when OFF was received)
+    keepBlinking = false;
+
+    // Access light turns YELLOW
     digitalWrite(TL_AG, LOW);
     digitalWrite(TL_AY, HIGH);
 
     // Each passage through Yellow will take 0,5 seconds
     delay(interval);
 
+    // Access light turns RED
     digitalWrite(TL_AY, LOW);
     digitalWrite(TL_AR, HIGH);
 
+    // Pedestrian light turns GREEN
     digitalWrite(PL_AG, HIGH);
     digitalWrite(PL_AR, LOW);
+
+    // Roundabout light turns YELLOW
+    digitalWrite(TL_BR, LOW);
+    digitalWrite(TL_BY, HIGH);
+
+    // Each passage through Yellow will take 0,5 seconds
+    delay(interval);
+
+    // Roundabout light turns GREEN
+    digitalWrite(TL_BY, LOW);
+    digitalWrite(TL_BG, HIGH);
 
     setACK();
 }
 
+// The coordination between TL kA and TL kB must be self-sufficient, implemented locally and not by the roundabout controller
 void receiveGREEN(){
+    // Stop blinking YELLOW (turned ON when OFF was received)
+    keepBlinking = false;
+
+    // Pedestrian light turns RED
     digitalWrite(PL_AG, LOW);
     digitalWrite(PL_AR, HIGH);
 
+    // Roundabout light turns YELLOW
+    digitalWrite(TL_BG, LOW);
+    digitalWrite(TL_BY, HIGH);
+
+    // Each passage through Yellow will take 0,5 seconds
+    delay(interval);
+
+    // Roundabout light turns RED
+    digitalWrite(TL_BY, LOW);
+    digitalWrite(TL_BR, HIGH);
+
+    // Access light turns YELLOW
     digitalWrite(TL_AR, LOW);
     digitalWrite(TL_AY, HIGH);
 
     // Each passage through Yellow will take 0,5 seconds
     delay(interval);
 
+    // Access light turns GREEN
     digitalWrite(TL_AY, LOW);
     digitalWrite(TL_AG, HIGH);
 
@@ -129,16 +166,23 @@ void receiveOFF(){
     digitalWrite(PL_AR, LOW);
     digitalWrite(TL_AG, LOW);
     digitalWrite(TL_AR, LOW);
+    digitalWrite(TL_BG, LOW);
+    digitalWrite(TL_BR, LOW);
 
     setACK();
 
+    keepBlinking = true;
+
+    // Start blinking YELLOW (will be turned OFF when RED/GREEN is received)
     while (keepBlinking){
         digitalWrite(TL_AY, HIGH);
+        digitalWrite(TL_BY, HIGH);
 
         // Each passage through Yellow will take 0,5 seconds
         delay(interval);
 
         digitalWrite(TL_AY, LOW);
+        digitalWrite(TL_BY, LOW);
 
         // Each passage through Yellow will take 0,5 seconds
         delay(interval);

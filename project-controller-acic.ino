@@ -1,6 +1,9 @@
 #include "Wire.h"
 
+// TODO:  Each traffic control light (green, yellow, and red) must have fault detection capability to detect that it is always turned OFF and does not react to its control
 // TODO: It must be possible for the controller and any traffic lights, to detect faults of the communications link, or in other traffic lights
+// TODO: While receiving or sending data the controller’s blue LED must blink
+// TODO: It must be possible to shorten the cycle time by half by pressing the pedestrian button - when the button is pressed the remaining of the cycle time is halved. The reduction affects a single cycle after which the system reverts to its normal operation cycle.
 
 const int controller = 0;
 
@@ -15,6 +18,7 @@ const int controller = 0;
 // - a potentiometer to select the period of traffic control (enter street #1 → enter street #2 → enter street #3 → enter street #4 → enter street #1)
 const int potentiometer = A0;
 
+// The identification of the roundabout entry corresponding to the traffic light is configured by jumpers (or fixed wires) connected to input ports of the Arduino controller – 1, 2, 3, 4 – in ascending order anti-clockwise.  ???????????????
 #define JUNCTION_1 8
 #define JUNCTION_2 9
 #define JUNCTION_3 10
@@ -56,12 +60,12 @@ void loop(){
             // Detects if the button was pressed again and exists the loop:
             if (lastButtonState == HIGH && currentButtonState == LOW){
                 // When turned OFF, the controller must signal all traffic lights to start blinking yellow, going back to the initial state
-                initialState();
                 break;
             }
 
             // When turned ON, the controller must start a cyclic sequence of control of the roundabout. 
             for(int i = 0; i < NUMBER_OF_JUNCTIONS; i++){
+                // While one traffic light is performing a red-yellow-green-yellow-red cycle, the other must have its red light always on (and, in part, pedestrian green). 
                 //  Block entries 2, 3 and 4 - Command entries 2, 3 and 4 to go RED, wait for the acknowledgements, command entry 1 to go GREEN.
                 if (i == 0){
                     sendMessage(char message[] = {controller, 0, junctionsArray[i + 1], junctionsArray[i + 1]});
@@ -82,6 +86,7 @@ void loop(){
                     sendMessage(char message[] = {controller, 1, junctionsArray[i + 1], 1 + junctionsArray[i + 1]});
             }
         }
+
     }
 }
 
