@@ -232,6 +232,7 @@ void receivePING(){
     char data[] = {pedestRedFailing + '0', pedestYellowFailing + '0', pedestGreenFailing + '0', redFailing + '0', yellowFailing + '0', greenFailing + '0', timerActivated + '0', '0'};
     information = strtol(data, NULL, 2);
     setSTATUS();
+    timerActivated = 0;
 }
 
 // The ACK (x) should be send as response to RED(x), GREEN(x) and OFF(x) requests.
@@ -240,7 +241,6 @@ void setACK(){
 }
 
 // Status(X) will be the response from the traffic light when the controller do a Ping(x) request.
-// The value which was defined to be send in TIME(x) now is obtained by the controller in the Status(X) message.               ???????????
 void setSTATUS(int information){
     status = {getEntryNumber(), 5, controller, information, getEntryNumber() + information + 5 + controller};
 }
@@ -254,7 +254,7 @@ void requestEvent(int i){
 
 //  The value which was defined to be send in TIME(x) now is obtained by the controller in the Status(X) message.               ???????????
 void sendTIME(){
-
+    timerActivated = 1;
 }
 
 void loop(){
