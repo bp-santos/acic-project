@@ -3,7 +3,6 @@
 // TODO:  Each traffic control light (green, yellow, and red) must have fault detection capability to detect that it is always turned OFF and does not react to its control
 // TODO: It must be possible for the controller and any traffic lights, to detect faults of the communications link, or in other traffic lights
 // TODO: While receiving or sending data the controller’s blue LED must blink
-// TODO: It must be possible to shorten the cycle time by half by pressing the pedestrian button - when the button is pressed the remaining of the cycle time is halved. The reduction affects a single cycle after which the system reverts to its normal operation cycle.
 
 const int controller = 0;
 
@@ -29,6 +28,12 @@ byte junctionsArray[NUMBER_OF_JUNCTIONS] = {JUNCTION_ADDRESS_1, JUNCTION_ADDRESS
 
 int lastButtonState;
 int currentButtonState;
+
+// Will store last time the second interval occured:
+unsigned long previousMillis = 0;  
+unsigned long remainingTime = 0;
+unsigned long reduction = 0;
+bool timeIsHalved = 0;
 
 
 void setup() { 
@@ -74,8 +79,32 @@ void loop(){
                 }
 
                 // Wait a control period [2, 15] seconds (controlled by potentiometer).
-                // It must be possible to shorten the cycle time by half by pressing the pedestrian button - when the button is pressed the remaining of the cycle time is halved.          ???????
-                delay(getControlPeriod());
+                // It must be possible to shorten the cycle time by half by pressing the pedestrian button - when the button is pressed the remaining of the cycle time is halved.
+                previousMillis = millis();
+                //previousMillis = 1000;
+                reduction = millis() - previousMillis;
+                // reduction = 1000 - 1000 = 0;
+                remainingTime = getControlPeriod() - reduction;
+                //remainingTime = 1000 - (1000 - 1000) = 1000;
+                while(remainingTime > 0){
+                    if (timeIsHalved){
+                        remainingTime = remainingTime / 2;
+                        reduction = millis() - previousMillis;
+                        // remainingTime = 425;
+                        // reduction = 1200 - 1000 = 200
+                        timeIsHalved = 0;                       // DO NOT PREVENT WHEN PEASANT PRESS MORE THAN ONE TIME
+                    }
+                    remainingTime = remainingTime + reduction;
+                    reduction = millis() - previousMillis;
+                    remainingTime = remainingTime - reduction;
+                    // remainingTime = 1000 + 0  - (1050 - 1000) = 950
+                    // remainingTime = 950 + 50  - (1100 - 1000) = 900
+                    // remainingTime = 900 + 100 - (1150 - 1000) = 850
+                    // PRESS THE BUTTON -> remainingTime = 425; reduction = 1200 - 1000 = 200
+                    // remainingTime = 425 + 200 - (1205 - 1000) = 420
+                    // remainingTime = 420 + 210 - (1260 - 1000) = 630 - 260 = 370
+                    // etc...
+                }
 
                 // Block entry 1 – command entry 1 to go RED, wait for the acknowledgement, command entry 2 to go GREEN, and so on
                 sendMessage(char message[] = {controller, 0, junctionsArray[i], junctionsArray[i]});
@@ -117,14 +146,25 @@ void sendMessage(char[] message){
     Wire.write(message); // sends the message 
     Wire.endTransmission();
 
-    if (operationNumber == 3)
+    if (operationNumber == 3){
         Wire.requestFrom(destination, 5); // request 5 bytes from slave device when a PING was sent
-    else
+        int count = 0;
+        while(Wire.available()){
+            int c = Wire.read();
+            count ++;
+            if (count == 4)
+                checkStatus(c);
+            Serial.print(c); // DO SOMETHING WITH THE ACKs ?????????????????
+        }
+    }
+    else{
         Wire.requestFrom(destination, 4); // request 4 bytes from slave device when another message was sent
-    while (Wire.available()) { 
-        char c = Wire.read(); 
-        Serial.print(c); // DO SOMETHING WITH THE ACKs ?????????????????
-    } 
+        // DO SOMETHING WHEN HE RECEIVES A TIME(X) MESSAGE
+        while (Wire.available()) { 
+            int c = Wire.read(); 
+            Serial.print(c); // DO SOMETHING WITH THE ACKs ?????????????????
+        } 
+    }
 
     // While receiving or sending data the controller’s blue LED must blink.
     stopBlinkingBLUE();
@@ -138,4 +178,23 @@ void startBlinkingBLUE(){
 // While receiving or sending data the controller’s blue LED must blink.
 void stopBlinkingBLUE(){
 
+}
+
+void checkStatus(int status){
+    int binary[8];
+    for (int i = 0; i < 8; i++)
+        binary[i] = 0;
+    int i = 7;
+    while (status > 0) {
+        binary[i] = status % 2;
+        status = status / 2;
+        i--;
+    }
+    for (int i = 0; i < 8; i++)
+        printf("%d", binary[i]);
+
+    // DO SOMETHING WITH THE FAULTY LIGHTS ????????????????
+
+    if (binary[7] == 1)
+        timeIsHalved = 1;
 }
