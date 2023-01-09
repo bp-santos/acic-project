@@ -64,34 +64,29 @@ void setup() {
   // Starts serial for output
   Serial.begin(9600);
 
-  // Initializes the pedestrian button as an input
-  pinMode(PEDESTRIAN_BUTTON, INPUT);
-
   // Initializes the jumpers as inputs
   pinMode(jumper1, INPUT);
   pinMode(jumper0, INPUT);
 
   // join i2c bus with address #entryNumber
   int entryNumber = getEntryNumber();
-  Serial.print("ENTRY ");
-  Serial.println(entryNumber);
   Wire.begin(entryNumber);
 
-  // when master sends a message
-  Wire.onReceive(receiveEvent);
-
-  //when master asks for the answer
-  Wire.onRequest(requestEvent);
+  Wire.onReceive(receiveEvent); // when master sends a message
+  Wire.onRequest(requestEvent); //when master asks for the answer
 
   // Initializes the traffic lights as outputs
   for (int i = 0; i < NUMBER_OF_TRAFFIC_LIGHTS; i++)
     pinMode(lights[i], OUTPUT);
+
+  // Initializes the pedestrian button as an input
+  pinMode(PEDESTRIAN_BUTTON, INPUT);
 }
 
+// Loop
 void loop() {
 
   checkPedestrianButton();
-  
   if (blinkYellow) handleYellowBlink();
 
   if(msgReceived) {
@@ -105,7 +100,7 @@ void loop() {
   }
 }
 
-// The identification of the roundabout entry corresponding to the traffic light is configured by jumpers (or fixed wires) connected to input ports of the Arduino controller – 1, 2, 3, 4 – in ascending order anti-clockwise. ?????? ARDUINO CONTROLLER ?????
+// Gets the roundabout entry based on 2 jumpers
 int getEntryNumber() {
   char entry[2];
   if (digitalRead(jumper1) == HIGH)
@@ -121,6 +116,7 @@ int getEntryNumber() {
   return number + 1;
 }
 
+// Checks if the pedestrian button was pressed
 void checkPedestrianButton() {
   lastPedestrianButtonState = currentPedestrianButtonState;      // Stores the previous state of the push button
   currentPedestrianButtonState = digitalRead(PEDESTRIAN_BUTTON);  // Stores the present state of the push button
@@ -158,87 +154,38 @@ void receiveEvent(int howMany) {
   }
 }
 
-// The coordination between TL kA and TL kB must be self-sufficient, implemented locally and not by the roundabout controller
+// Turns off a given led pin and turns on the other given led pin
+void changeLight(int turnOff, int turnOn) {
+  digitalWrite(turnOff, LOW);
+  digitalWrite(turnOn, HIGH);
+}
+
+// Handles the reception of a RED message by doing the sequence of traffic lights
 void receiveRED() {
-  Serial.print("RED INICIO: ");
-  Serial.println(millis());
-
-  // Stop blinking YELLOW (turned ON when OFF was received)
   blinkYellow = false;
-
-  // Access light turns YELLOW
-  digitalWrite(TL_AG, LOW);
-  digitalWrite(TL_AY, HIGH);
-
-  // Each passage through Yellow will take 0,5 seconds
-  // Each passage through Yellow will take 0,5 seconds
-  delayMilliseconds(yellowInterval);
-
-  // Access light turns RED
-  digitalWrite(TL_AY, LOW);
-  digitalWrite(TL_AR, HIGH);
-
-  // Pedestrian light turns GREEN
-  digitalWrite(PL_AG, HIGH);
-  digitalWrite(PL_AR, LOW);
-  // Resets timer since the pedestrian light is now green
-  timerActivated = 0;
-
-  // Roundabout light turns YELLOW
-  digitalWrite(TL_BR, LOW);
-  digitalWrite(TL_BY, HIGH);
-
-  // Each passage through Yellow will take 0,5 seconds
-  delayMilliseconds(yellowInterval);
-
-  // Roundabout light turns GREEN
-  digitalWrite(TL_BY, LOW);
-  digitalWrite(TL_BG, HIGH);
-
-  Serial.print("RED FIM: ");
-  Serial.println(millis());
+  changeLight(TL_AG, TL_AY); // Access light turns YELLOW
+  delayMilliseconds(yellowInterval); // Passage through yellow
+  changeLight(TL_AY, TL_AR); // Access light turns RED
+  changeLight(PL_AR , PL_AG); // Pedestrian light turns GREEN
+  timerActivated = 0; // Resets timer since the pedestrian light is now green
+  changeLight(TL_BR, TL_BY); // Roundabout light turns YELLOW
+  delayMilliseconds(yellowInterval); // Passage through yellow
+  changeLight(TL_BY, TL_BG); // Roundabout light turns GREEN
 }
 
-// The coordination between TL kA and TL kB must be self-sufficient, implemented locally and not by the roundabout controller
+// Handles the reception of a GREEN message by doing the sequence of traffic lights
 void receiveGREEN() {
-  Serial.print("GREEN INICIO: ");
-  Serial.println(millis());
-
-  // Stop blinking YELLOW (turned ON when OFF was received)
   blinkYellow = false;
-
-  // Pedestrian light turns RED
-  digitalWrite(PL_AG, LOW);
-  digitalWrite(PL_AR, HIGH);
-
-  // Roundabout light turns YELLOW
-  digitalWrite(TL_BG, LOW);
-  digitalWrite(TL_BY, HIGH);
-
-  // Each passage through Yellow will take 0,5 seconds
-  delayMillisecondsPedestrian(yellowInterval);
-
-  // Roundabout light turns RED
-  digitalWrite(TL_BY, LOW);
-  digitalWrite(TL_BR, HIGH);
-
-  // Access light turns YELLOW
-  digitalWrite(TL_AR, LOW);
-  digitalWrite(TL_AY, HIGH);
-
-  // Each passage through Yellow will take 0,5 seconds
-  delayMillisecondsPedestrian(yellowInterval);
-
-  // Access light turns GREEN
-  digitalWrite(TL_AY, LOW);
-  digitalWrite(TL_AG, HIGH);
-
-  Serial.print("GREEN FIM: ");
-  Serial.println(millis());
+  changeLight(TL_BG, TL_BY); // Roundabout light turns YELLOW
+  delayMillisecondsPedestrian(yellowInterval); // Passage through yellow
+  changeLight(TL_BY, TL_BR); // Roundabout light turns RED
+  changeLight(PL_AG, PL_AR); // Pedestrian light turns RED
+  changeLight(TL_AR, TL_AY); // Access light turns YELLOW
+  delayMillisecondsPedestrian(yellowInterval); // Passage through yellow
+  changeLight(TL_AY, TL_AG); // Access light turns GREEN
 }
 
-
-
+// Delay with milliseconds
 void delayMilliseconds(unsigned long milliseconds) {
   unsigned long startTime = millis();
   while (millis() - startTime < milliseconds) {
@@ -246,6 +193,7 @@ void delayMilliseconds(unsigned long milliseconds) {
   }
 }
 
+// Delay with milliseconds while checking if the pedestrian button was pressed
 void delayMillisecondsPedestrian(unsigned long milliseconds) {
   unsigned long startTime = millis();
   while (millis() - startTime < milliseconds) {
@@ -253,6 +201,7 @@ void delayMillisecondsPedestrian(unsigned long milliseconds) {
   }
 }
 
+// Handles the reception of an OFF message by turning off traffic lights and enable the yellow blinking
 void receiveOFF() {
   digitalWrite(PL_AG, LOW);
   digitalWrite(PL_AR, LOW);
@@ -263,6 +212,7 @@ void receiveOFF() {
   blinkYellow = true;
 }
 
+// Handles the yellow bliking
 void handleYellowBlink() {
   if (millis() - previousMillisYellowBlink > yellowBlinkInterval) {
     // If the LED is OFF turn it ON and vice-versa:
@@ -278,7 +228,7 @@ void handleYellowBlink() {
   }
 }
 
-// The ACK (x) should be send as response to RED(x), GREEN(x) and OFF(x) requests.
+// Sets the ack message
 void setACK() {
   ack[0] = (char)getEntryNumber();
   ack[1] = (char)ACK;
@@ -286,7 +236,7 @@ void setACK() {
   ack[3] = (char)(getEntryNumber() + ACK + controller);
 }
 
-// Status(X) will be the response from the traffic light when the controller do a Ping(x) request.
+// Sets the status message
 void setSTATUS() {
   char data[] = { pedestRedFailing + '0', pedestYellowFailing + '0', pedestGreenFailing + '0', redFailing + '0', yellowFailing + '0', greenFailing + '0', timerActivated + '0', '0' };
   int information = strtol(data, NULL, 2);
@@ -297,6 +247,7 @@ void setSTATUS() {
   status[4] = (char)(getEntryNumber() + information + STATUS + controller);
 }
 
+// Triggered when the Access gets interrupted to send a message to the Controller
 void requestEvent(int howMany) {
   if (msgType == RED || msgType == GREEN || msgType == OFF) {
     setACK();
@@ -305,8 +256,6 @@ void requestEvent(int howMany) {
   }
   if (msgType == PING) {
     setSTATUS();
-    Serial.print("Timer Activated: ");
-    Serial.println(timerActivated);
     for (int i = 0; i < STATUS; i++)
       Wire.write(status[i]);
   }
