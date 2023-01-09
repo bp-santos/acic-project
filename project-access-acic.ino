@@ -92,12 +92,8 @@ void setup() {
 }
 
 void loop() {
-  lastButtonState = currentButtonState;      // Stores the previous state of the push button
-  currentButtonState = digitalRead(BUTTON);  // Stores the present state of the push button
-
-  if (lastButtonState == HIGH && currentButtonState == LOW)
-    // Loops while the button is not pressed again:
-    sendTIME();
+  
+  checkPedestrianButton();
   
   if (blinkYellow) handleYellowBlink();
 
@@ -106,9 +102,7 @@ void loop() {
       case RED: receiveRED(); msgReceived = false; break;
       case GREEN: receiveGREEN(); msgReceived = false; break;
       case OFF: receiveOFF(); msgReceived = false; break;
-      case PING: receivePING(); msgReceived = false; break;
-      //case 4: receiveACK(); break;
-      //case 5: receiveSTATUS(); break;
+      case PING:  msgReceived = false; break;
       default: Serial.println("Should never happen, but just in case...");
     }
   }
@@ -134,21 +128,25 @@ int getEntryNumber() {
   return number;
 }
 
+void checkPedestrianButton() {
+  lastButtonState = currentButtonState;      // Stores the previous state of the push button
+  currentButtonState = digitalRead(BUTTON);  // Stores the present state of the push button
+
+  if (lastButtonState == HIGH && currentButtonState == LOW) {
+    // Loops while the button is not pressed again:
+    timerActivated = 1;
+    Serial.println("FUI CARREGADO!!!!!!!!1");
+  }
+}
+
 // Triggered when the Access gets interrupted to read the message from the Controller
 void receiveEvent(int howMany) {
 
-  if (howMany == 4 || howMany == 5) {  // Extra security check (how many bytes were sent)
+  if (howMany == 4) {  // Extra security check (how many bytes were sent)
     char sender = Wire.read();
     char operationNumber = Wire.read();
     char destination = Wire.read();
-    char integrityByte;  // WHAT TO DO WITH THIS ??????
-    char information;
-    if (howMany == 4)
-      integrityByte = Wire.read(); // TODO: CHECK IF MESSAGE IS VALID ACCORDINGLY TO THE PROTOCOL
-    if (howMany == 5) {
-      information = Wire.read(); // TODO: DISCOVER WHY USE THIS SHIT
-      integrityByte = Wire.read();
-    }
+    char integrityByte = Wire.read(); // TODO: CHECK IF MESSAGE IS VALID ACCORDINGLY TO THE PROTOCOL
     if ((int)destination == getEntryNumber()) {
       Serial.print("RECEBI ");
       Serial.print((int)operationNumber);
@@ -174,6 +172,8 @@ void receiveEvent(int howMany) {
 
 // The coordination between TL kA and TL kB must be self-sufficient, implemented locally and not by the roundabout controller
 void receiveRED() {
+
+  timerActivated = 0;
 
   Serial.print("RED INICIO: ");
   Serial.println(millis());
@@ -220,7 +220,6 @@ void receiveGREEN() {
   Serial.print("GREEN INICIO: ");
   Serial.println(millis());
 
-
   // Stop blinking YELLOW (turned ON when OFF was received)
   blinkYellow = false;
 
@@ -235,7 +234,7 @@ void receiveGREEN() {
   
 
   // Each passage through Yellow will take 0,5 seconds
-  delayMilliseconds(yellowInterval);
+  delayMillisecondsP(yellowInterval);
 
   
 
@@ -250,9 +249,7 @@ void receiveGREEN() {
   
 
   // Each passage through Yellow will take 0,5 seconds
-  delayMilliseconds(yellowInterval);
-
-  
+  delayMillisecondsP(yellowInterval);
 
   // Access light turns GREEN
   digitalWrite(TL_AY, LOW);
@@ -268,6 +265,13 @@ void delayMilliseconds(unsigned long milliseconds) {
   unsigned long startTime = millis();
   while (millis() - startTime < milliseconds) {
     // Do nothing
+  }
+}
+
+void delayMillisecondsP(unsigned long milliseconds) {
+  unsigned long startTime = millis();
+  while (millis() - startTime < milliseconds) {
+    checkPedestrianButton();
   }
 }
 
@@ -305,54 +309,47 @@ void handleYellowBlink() {
   }
 }
 
-// The traffic lights will never do Ping(x) to other traffic lights neither to controller.
-void receivePING() {
-  char data[] = { pedestRedFailing + '0', pedestYellowFailing + '0', pedestGreenFailing + '0', redFailing + '0', yellowFailing + '0', greenFailing + '0', timerActivated + '0', '0' };
-  int information = strtol(data, NULL, 2);
-  setSTATUS(information); 
-  timerActivated = 0;
-}
+
 
 // The ACK (x) should be send as response to RED(x), GREEN(x) and OFF(x) requests.
 void setACK() {
   ack[0] = (char)getEntryNumber();
   ack[1] = (char)ACK;
   ack[2] = (char)controller;
-  ack[3] = (char)(getEntryNumber() + 4 + controller);
+  ack[3] = (char)(getEntryNumber() + ACK + controller);
   //{ (char)getEntryNumber(), (char)4, (char)controller, (char)(getEntryNumber() + 4 + controller) };
 }
 
 // Status(X) will be the response from the traffic light when the controller do a Ping(x) request.
-void setSTATUS(int information) {
+void setSTATUS() {
+  char data[] = { pedestRedFailing + '0', pedestYellowFailing + '0', pedestGreenFailing + '0', redFailing + '0', yellowFailing + '0', greenFailing + '0', timerActivated + '0', '0' };
+  int information = strtol(data, NULL, 2);
   status[0] = (char)getEntryNumber();
-  status[1] = (char)5;
+  status[1] = (char)STATUS;
   status[2] = (char)controller;
   status[3] = (char)information;
-  status[4] = (char)(getEntryNumber() + information + 5 + controller);
+  status[4] = (char)(getEntryNumber() + information + STATUS + controller);
   // { (char)getEntryNumber(), (char)5, (char)controller, (char)information, (char)(getEntryNumber() + information + 5 + controller) };
 }
 
 void requestEvent(int howMany) {
-  if (howMany == 4) {  // Extra security check (how many bytes were sent)
-    
-    Wire.write(ack[0]);
-    Wire.write(ack[1]);
-    Wire.write(ack[2]);
-    Wire.write(ack[3]);
-    
+  if (msgType == RED || msgType == GREEN || msgType == OFF) {  // Extra security check (how many bytes were sent)
+    setACK();
+    for (int i = 0; i < ACK; i++)
+      Wire.write(ack[i]);
   }
-  if (howMany == 5) {  // Extra security check (how many bytes were sent)
-    
-    Wire.write(status[0]);
-    Wire.write(status[1]);
-    Wire.write(status[2]);
-    Wire.write(status[3]);
-    Wire.write(status[4]);
-    
+  if (msgType == PING) {  // Extra security check (how many bytes were sent)
+    setSTATUS();
+    Serial.print("Timer Activated: ");
+    Serial.println(timerActivated);
+    for (int i = 0; i < STATUS; i++)
+      Wire.write(status[i]);
   }
 }
 
-//  The value which was defined to be send in TIME(x) now is obtained by the controller in the Status(X) message.               ???????????
-void sendTIME() {
-  timerActivated = 1;
+
+
+bool getLightStatus(int ledpin) {
+  if (digitalRead(ledpin) == HIGH) return true;
+  return false;
 }
