@@ -13,7 +13,6 @@ const int ACK = 4;
 const int STATUS = 5;
 
 // Jumpers pins
-const byte jumper2 = 4;
 const byte jumper1 = 3;
 const byte jumper0 = 2; 
 
@@ -69,7 +68,6 @@ void setup() {
   pinMode(PEDESTRIAN_BUTTON, INPUT);
 
   // Initializes the jumpers as inputs
-  pinMode(jumper2, INPUT);
   pinMode(jumper1, INPUT);
   pinMode(jumper0, INPUT);
 
@@ -109,22 +107,18 @@ void loop() {
 
 // The identification of the roundabout entry corresponding to the traffic light is configured by jumpers (or fixed wires) connected to input ports of the Arduino controller – 1, 2, 3, 4 – in ascending order anti-clockwise. ?????? ARDUINO CONTROLLER ?????
 int getEntryNumber() {
-  char entry[3];
-  if (digitalRead(jumper2) == HIGH)
+  char entry[2];
+  if (digitalRead(jumper1) == HIGH)
     entry[0] = '1';
   else
     entry[0] = '0';
-  if (digitalRead(jumper1) == HIGH)
+  if (digitalRead(jumper0) == HIGH)
     entry[1] = '1';
   else
     entry[1] = '0';
-  if (digitalRead(jumper0) == HIGH)
-    entry[2] = '1';
-  else
-    entry[2] = '0';
 
-  int number = strtol(entry, NULL, 2);
-  return number;
+  int number = strtol(entry, NULL, 2) ;
+  return number + 1;
 }
 
 void checkPedestrianButton() {
@@ -242,6 +236,8 @@ void receiveGREEN() {
   Serial.print("GREEN FIM: ");
   Serial.println(millis());
 }
+
+
 
 void delayMilliseconds(unsigned long milliseconds) {
   unsigned long startTime = millis();

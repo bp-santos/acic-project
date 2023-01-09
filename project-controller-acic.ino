@@ -15,9 +15,9 @@ const int ACK = 4;
 const int STATUS = 5;
 
 // Controller pins
-#define CONTROLLER_STATUS 6
-#define BUS_ACTIVITY 5
-#define CONTROLLER_BUTTON 7
+#define CONTROLLER_STATUS 12
+//#define BUS_ACTIVITY 5
+#define CONTROLLER_BUTTON 13
 const int potentiometer = A0;
 
 // Junctions
@@ -55,21 +55,100 @@ int junctionIndexToRED = 0; // Index of the junction wich entry goes RED
 int junctionIndexToGREEN = 1; // Index of the junction wich entry goes GREEN
 
 
+// ------------ FROM ACCESS CODE BUT ADAPTED: -------------------
+// Jumpers pins
+const byte jumper1 = 3;
+const byte jumper0 = 2; 
+
+// Traffic lights
+#define NUMBER_OF_TRAFFIC_LIGHTS 7
+#define TL_AR 7
+#define TL_AY 8
+#define TL_AG 9
+#define PL_AG 10
+#define PEDESTRIAN_BUTTON 11
+#define TL_BR 4
+#define TL_BY 5
+#define TL_BG 6
+int lights[NUMBER_OF_TRAFFIC_LIGHTS] = { TL_BR, TL_BY, TL_BG, TL_AR, TL_AY, TL_AG, PL_AG };
+
+// Period of time in ms to stay yellow during trafffic cycle: red -> yellow -> green
+const int yellowInterval = 500;
+
+// Variables to handle the bliking yellow leds from TL_A and TL_B
+unsigned long previousMillisYellowBlink = 0; // Will store last time LED was updated
+int yellowBlinkInterval = 1000;
+int yellowLedState = LOW;
+bool blinkYellow = false;
+
+// Information variables
+int pedestRedFailing = 0;
+int pedestYellowFailing = 0;
+int pedestGreenFailing = 0;
+int redFailing = 0;
+int yellowFailing = 0;
+int greenFailing = 0;
+int timerActivated = 0;
+
+// Variables to handle Pedestrian Button
+int lastPedestrianButtonState;
+int currentPedestrianButtonState;
+
+// Variables to handle ack and status messages
+char ack[4];
+char status[5];
+
+// Flags to handle received messages by Junction
+bool msgReceived = false; // True: when a message is received; False: after calling the method that handles the message
+int msgType = -1; // Gets the identifier of message received: {RED, GREEN, OFF, PING}
+
+int myEntryNumber;
+
 // Setup
 void setup() {
   Serial.begin(9600);
 
+  // ------------ FROM ACCESS CODE BUT ADAPTED: -------------------
+  // Initializes the pedestrian button as an input
+  pinMode(PEDESTRIAN_BUTTON, INPUT);
+
+  // Initializes the jumpers as inputs
+  pinMode(jumper1, INPUT);
+  pinMode(jumper0, INPUT);
+  // join i2c bus with address #entryNumber
+  myEntryNumber = getEntryNumber();
+  Serial.print("ENTRY ");
+  Serial.println(myEntryNumber);
+
+  // Initializes the traffic lights as outputs
+  for (int i = 0; i < NUMBER_OF_TRAFFIC_LIGHTS; i++)
+    pinMode(lights[i], OUTPUT);
+
+
+  // -------------- Controller: -------------
+
+
   pinMode(CONTROLLER_STATUS, OUTPUT);
-  pinMode(BUS_ACTIVITY, OUTPUT);
+  //pinMode(BUS_ACTIVITY, OUTPUT);
 
   pinMode(CONTROLLER_BUTTON, INPUT);
 
   Wire.begin(0);
+
 }
 
 // Loop
 void loop() {
-  Serial.println("Passei pelo loop()");
+  // ------------ FROM ACCESS CODE BUT ADAPTED: -------------------
+
+  checkPedestrianButton();
+  
+  if (blinkYellow) handleYellowBlink();
+
+
+  // ------------ Controller: -------------
+
+  //Serial.println("Passei pelo loop()");
   if(!controllerON && firstTimeInLoop) initialState();
 
   handleControllerButtonPress();
@@ -213,71 +292,85 @@ void sendMessage(char message[]) {
   Serial.print(" para ");
   Serial.println(destination);
 
-  startBlinkingBLUE();
 
-  Wire.beginTransmission(destination);  // transmit to device
-  Wire.write(message[0]);                  // sends the message
-  Wire.write(message[1]); 
-  Wire.write(message[2]); 
-  Wire.write(message[3]); 
-  Wire.endTransmission();
-
-  stopBlinkingBLUE();
-
-  if (msgType == PING) {
-    Serial.println("STATUS");
-    
-    Wire.requestFrom(destination, STATUS);  // request 5 bytes from slave device when a PING was sent
-    
-    startBlinkingBLUE();
-
-    char sender = Wire.read();
-    Serial.print("Sender: ");
-    Serial.println((int)sender);
-    char type = Wire.read();
-    Serial.print("Type: ");
-    Serial.println((int)type);
-    char destination = Wire.read();
-    Serial.print("Destination: ");
-    Serial.println((int)destination);
-    char information = Wire.read();
-    Serial.print("Information: ");
-    Serial.println((int)information);
-    char sender_status = Wire.read();
-    Serial.print("Sender status: ");
-    Serial.println((int)sender_status);
-
-    stopBlinkingBLUE();
-
-    checkStatus((int)information);
-    
-    // DO SOMETHING WITH THE ACKs ?????????????????
-    
+  if (destination == myEntryNumber) {
+    switch(msgType) {
+      case RED: receiveRED(); break;
+      case GREEN: receiveGREEN(); break;
+      case OFF: receiveOFF(); break;
+      case PING: break;
+      default: Serial.println("Should never happen, but just in case...");
+    }
   } else {
-    Wire.requestFrom(destination, ACK);  // request 4 bytes from slave device when another message was sent
-    // DO SOMETHING WHEN HE RECEIVES A TIME(X) MESSAGE
+
+
     startBlinkingBLUE();
-    char sender = Wire.read();
-    char type = Wire.read();
-    char destination = Wire.read();
-    char sender_ack = Wire.read();
+
+    Wire.beginTransmission(destination);  // transmit to device
+    Wire.write(message[0]);                  // sends the message
+    Wire.write(message[1]); 
+    Wire.write(message[2]); 
+    Wire.write(message[3]); 
+    Wire.endTransmission();
+
     stopBlinkingBLUE();
-    Serial.print("Received ACK : ");
-    Serial.print((int)sender_ack);  // DO SOMETHING WITH THE ACKs ?????????????????
-    Serial.print(" from: ");
-    Serial.println((int)sender);
+
+    if (msgType == PING) {
+      Serial.println("STATUS");
+      
+      Wire.requestFrom(destination, STATUS);  // request 5 bytes from slave device when a PING was sent
+      
+      startBlinkingBLUE();
+
+      char sender = Wire.read();
+      Serial.print("Sender: ");
+      Serial.println((int)sender);
+      char type = Wire.read();
+      Serial.print("Type: ");
+      Serial.println((int)type);
+      char destination = Wire.read();
+      Serial.print("Destination: ");
+      Serial.println((int)destination);
+      char information = Wire.read();
+      Serial.print("Information: ");
+      Serial.println((int)information);
+      char sender_status = Wire.read();
+      Serial.print("Sender status: ");
+      Serial.println((int)sender_status);
+
+      stopBlinkingBLUE();
+
+      checkStatus((int)information);
+      
+      // DO SOMETHING WITH THE ACKs ?????????????????
+      
+    } else {
+      Wire.requestFrom(destination, ACK);  // request 4 bytes from slave device when another message was sent
+      // DO SOMETHING WHEN HE RECEIVES A TIME(X) MESSAGE
+      startBlinkingBLUE();
+      char sender = Wire.read();
+      char type = Wire.read();
+      char destination = Wire.read();
+      char sender_ack = Wire.read();
+      stopBlinkingBLUE();
+      Serial.print("Received ACK : ");
+      Serial.print((int)sender_ack);  // DO SOMETHING WITH THE ACKs ?????????????????
+      Serial.print(" from: ");
+      Serial.println((int)sender);
+
+    }
 
   }
 }
 
 // While receiving or sending data the controller’s blue LED must blink.
 void startBlinkingBLUE() {
-  digitalWrite(BUS_ACTIVITY, HIGH);
+  digitalWrite(CONTROLLER_STATUS, HIGH); // CONTROLLER_STATUS substitutes BUS_ACTIVITY
 }
 
 // While receiving or sending data the controller’s blue LED must blink.
 void stopBlinkingBLUE() {
-  digitalWrite(BUS_ACTIVITY, LOW);
+  digitalWrite(CONTROLLER_STATUS, LOW); // CONTROLLER_STATUS substitutes BUS_ACTIVITY
 }
 
 void checkStatus(int status) { // TODO - completar o check do estado
@@ -295,4 +388,173 @@ void checkStatus(int status) { // TODO - completar o check do estado
 
   if (binary[6] == 1)
     timeIsHalved = 1;
+}
+
+
+
+// ------------ FROM ACCESS CODE BUT ADAPTED: -------------------
+
+
+// The identification of the roundabout entry corresponding to the traffic light is configured by jumpers (or fixed wires) connected to input ports of the Arduino controller – 1, 2, 3, 4 – in ascending order anti-clockwise. ?????? ARDUINO CONTROLLER ?????
+int getEntryNumber() {
+  char entry[2];
+  if (digitalRead(jumper1) == HIGH)
+    entry[0] = '1';
+  else
+    entry[0] = '0';
+  if (digitalRead(jumper0) == HIGH)
+    entry[1] = '1';
+  else
+    entry[1] = '0';
+
+  int number = strtol(entry, NULL, 2);
+  return number + 1;
+}
+
+void checkPedestrianButton() {
+  lastPedestrianButtonState = currentPedestrianButtonState;      // Stores the previous state of the push button
+  currentPedestrianButtonState = digitalRead(PEDESTRIAN_BUTTON);  // Stores the present state of the push button
+  if (lastPedestrianButtonState == HIGH && currentPedestrianButtonState == LOW) {
+    timerActivated = 1;
+    Serial.println("FUI CARREGADO!!!!!!!!");
+  }
+}
+
+// The coordination between TL kA and TL kB must be self-sufficient, implemented locally and not by the roundabout controller
+void receiveRED() {
+  Serial.print("RED INICIO: ");
+  Serial.println(millis());
+
+  // Stop blinking YELLOW (turned ON when OFF was received)
+  blinkYellow = false;
+
+  // Access light turns YELLOW
+  digitalWrite(TL_AG, LOW);
+  digitalWrite(TL_AY, HIGH);
+
+  // Each passage through Yellow will take 0,5 seconds
+  // Each passage through Yellow will take 0,5 seconds
+  delayMilliseconds(yellowInterval);
+
+  // Access light turns RED
+  digitalWrite(TL_AY, LOW);
+  digitalWrite(TL_AR, HIGH);
+
+  // Pedestrian light turns GREEN
+  digitalWrite(PL_AG, HIGH);
+  //digitalWrite(PL_AR, LOW);
+  // Resets timer since the pedestrian light is now green
+  timerActivated = 0;
+
+  // Roundabout light turns YELLOW
+  digitalWrite(TL_BR, LOW);
+  digitalWrite(TL_BY, HIGH);
+
+  // Each passage through Yellow will take 0,5 seconds
+  delayMilliseconds(yellowInterval);
+
+  // Roundabout light turns GREEN
+  digitalWrite(TL_BY, LOW);
+  digitalWrite(TL_BG, HIGH);
+
+  Serial.print("RED FIM: ");
+  Serial.println(millis());
+}
+
+// The coordination between TL kA and TL kB must be self-sufficient, implemented locally and not by the roundabout controller
+void receiveGREEN() {
+  Serial.print("GREEN INICIO: ");
+  Serial.println(millis());
+
+  // Stop blinking YELLOW (turned ON when OFF was received)
+  blinkYellow = false;
+
+  // Pedestrian light turns RED
+  digitalWrite(PL_AG, LOW);
+  //digitalWrite(PL_AR, HIGH);
+
+  // Roundabout light turns YELLOW
+  digitalWrite(TL_BG, LOW);
+  digitalWrite(TL_BY, HIGH);
+
+  // Each passage through Yellow will take 0,5 seconds
+  delayMillisecondsPedestrian(yellowInterval);
+
+  // Roundabout light turns RED
+  digitalWrite(TL_BY, LOW);
+  digitalWrite(TL_BR, HIGH);
+
+  // Access light turns YELLOW
+  digitalWrite(TL_AR, LOW);
+  digitalWrite(TL_AY, HIGH);
+
+  // Each passage through Yellow will take 0,5 seconds
+  delayMillisecondsPedestrian(yellowInterval);
+
+  // Access light turns GREEN
+  digitalWrite(TL_AY, LOW);
+  digitalWrite(TL_AG, HIGH);
+
+  Serial.print("GREEN FIM: ");
+  Serial.println(millis());
+}
+
+
+
+void delayMilliseconds(unsigned long milliseconds) {
+  unsigned long startTime = millis();
+  while (millis() - startTime < milliseconds) {
+    // Do nothing
+  }
+}
+
+void delayMillisecondsPedestrian(unsigned long milliseconds) {
+  unsigned long startTime = millis();
+  while (millis() - startTime < milliseconds) {
+    checkPedestrianButton();
+  }
+}
+
+void receiveOFF() {
+  digitalWrite(PL_AG, LOW);
+  //digitalWrite(PL_AR, LOW);
+  digitalWrite(TL_AG, LOW);
+  digitalWrite(TL_AR, LOW);
+  digitalWrite(TL_BG, LOW);
+  digitalWrite(TL_BR, LOW);
+  blinkYellow = true;
+}
+
+void handleYellowBlink() {
+  if (millis() - previousMillisYellowBlink > yellowBlinkInterval) {
+    // If the LED is OFF turn it ON and vice-versa:
+    if (yellowLedState == LOW) {
+      yellowLedState = HIGH;
+    } else {
+      yellowLedState = LOW;
+    }
+    // Sets the LEDs with the ledState (HIGH/LOW):
+    digitalWrite(TL_AY, yellowLedState);
+    digitalWrite(TL_BY, yellowLedState);
+    previousMillisYellowBlink = millis();
+  }
+}
+
+// The ACK (x) should be send as response to RED(x), GREEN(x) and OFF(x) requests.
+void setACK() {
+  ack[0] = (char)getEntryNumber();
+  ack[1] = (char)ACK;
+  ack[2] = (char)controller;
+  ack[3] = (char)(getEntryNumber() + ACK + controller);
+}
+
+// Status(X) will be the response from the traffic light when the controller do a Ping(x) request.
+void setSTATUS() {
+  char data[] = { pedestRedFailing + '0', pedestYellowFailing + '0', pedestGreenFailing + '0', redFailing + '0', yellowFailing + '0', greenFailing + '0', timerActivated + '0', '0' };
+  int information = strtol(data, NULL, 2);
+  status[0] = (char)getEntryNumber();
+  status[1] = (char)STATUS;
+  status[2] = (char)controller;
+  status[3] = (char)information;
+  status[4] = (char)(getEntryNumber() + information + STATUS + controller);
 }
