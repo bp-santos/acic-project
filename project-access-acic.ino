@@ -238,6 +238,8 @@ void setACK() {
 
 // Sets the status message
 void setSTATUS() {
+  pedestRedFailing = digitalRead(PL_AR); // Checks the most critical (Pedest Red)
+  redFailing = digitalRead(TL_AR); // Checks the most critical (Red)
   char data[] = { pedestRedFailing + '0', pedestYellowFailing + '0', pedestGreenFailing + '0', redFailing + '0', yellowFailing + '0', greenFailing + '0', timerActivated + '0', '0' };
   int information = strtol(data, NULL, 2);
   status[0] = (char)getEntryNumber();

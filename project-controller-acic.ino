@@ -249,7 +249,7 @@ void initialSequence() {
     char red[] = { (char)controller, (char)RED, (char)junctionsArray[i], (char)junctionsArray[i] };
     sendMessage(red);
   }
-  char green[] = { (char)controller, (char)GREEN, (char)junctionsArray[0], (char)(1 + junctionsArray[0]) };
+  char green[] = { (char)controller, (char)GREEN, (char)junctionsArray[0], (char)(GREEN + junctionsArray[0]) };
   sendMessage(green);
 }
 
@@ -338,18 +338,25 @@ void sendMessage(char message[]) {
       Wire.requestFrom(destination, ACK);  // request 4 bytes from slave device when another message was sent
       // DO SOMETHING WHEN HE RECEIVES A TIME(X) MESSAGE
       startBlinkingBLUE();
-      char sender = Wire.read();
-      char type = Wire.read();
-      char destination = Wire.read();
-      char sender_ack = Wire.read();
+      char ack_sender = Wire.read();
+      char ack_type = Wire.read();
+      char ack_destination = Wire.read();
+      char ack_ack = Wire.read();
       stopBlinkingBLUE();
       Serial.print("Received ACK : ");
-      Serial.print((int)sender_ack);  // DO SOMETHING WITH THE ACKs ?????????????????
+      Serial.print((int)ack_ack);  // DO SOMETHING WITH THE ACKs ?????????????????
       Serial.print(" from: ");
-      Serial.println((int)sender);
+      Serial.println((int)ack_sender);
 
+
+      if ((int)ack_sender == destination && (int)ack_type == ACK && (int)ack_destination == controller && (int)ack_ack == (destination + ACK)) {
+        Serial.println("ACK Correct!");
+      } else {
+        Serial.println("ACK Incorrect!");
+        controllerON = 0; // Shuts down the controller
+        firstTimeInLoop = 1; // Sets the first time in loop variable to 1
+      }
     }
-
   }
 }
 
@@ -374,12 +381,18 @@ void checkStatus(int status) { // TODO - completar o check do estado
     status = status / 2;
     i--;
   }
-  // DO SOMETHING WITH THE FAULTY LIGHTS ????????????????
+
+  int pedestRedFailing = binary [0];
+  int redFailing = binary [3];
+
+  if (pedestRedFailing || redFailing) { // Red faulty lights -> Initial State
+    controllerON = 0; // Shuts down the controller
+    firstTimeInLoop = 1; // Sets the first time in loop variable to 1
+  }
 
   if (binary[6] == 1)
     timeIsHalved = 1;
 }
-
 
 
 // ------------ FROM ACCESS CODE BUT ADAPTED: -------------------
@@ -484,23 +497,4 @@ void handleYellowBlink() {
     digitalWrite(TL_BY, yellowLedState);
     previousMillisYellowBlink = millis();
   }
-}
-
-// The ACK (x) should be send as response to RED(x), GREEN(x) and OFF(x) requests.
-void setACK() {
-  ack[0] = (char)getEntryNumber();
-  ack[1] = (char)ACK;
-  ack[2] = (char)controller;
-  ack[3] = (char)(getEntryNumber() + ACK + controller);
-}
-
-// Status(X) will be the response from the traffic light when the controller do a Ping(x) request.
-void setSTATUS() {
-  char data[] = { pedestRedFailing + '0', pedestYellowFailing + '0', pedestGreenFailing + '0', redFailing + '0', yellowFailing + '0', greenFailing + '0', timerActivated + '0', '0' };
-  int information = strtol(data, NULL, 2);
-  status[0] = (char)getEntryNumber();
-  status[1] = (char)STATUS;
-  status[2] = (char)controller;
-  status[3] = (char)information;
-  status[4] = (char)(getEntryNumber() + information + STATUS + controller);
 }
